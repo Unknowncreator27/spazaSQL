@@ -1,49 +1,105 @@
 CREATE DATABASE spazaDB
-go
+GO
+
+USE spazaDB
+GO
 
 CREATE TABLE Category (
-    CategoryID     INT IDENTITY(1,1) PRIMARY KEY,
-    CategoryName   NVARCHAR(50) NOT NULL UNIQUE
+    CategoryID INT IDENTITY(1,1) PRIMARY KEY,
+    CategoryName VARCHAR(50) NOT NULL UNIQUE
 );
-GO
-
-
 
 CREATE TABLE Supplier (
-    SupplierID     INT IDENTITY(1,1) PRIMARY KEY,
-    SupplierName   NVARCHAR(100) NOT NULL,
-    ContactNumber  NVARCHAR(20)  NULL,
-    Address        NVARCHAR(200) NULL
+    SupplierID INT IDENTITY(1,1) PRIMARY KEY,
+    SupplierName VARCHAR(100) NOT NULL,
+    ContactNumber VARCHAR(20) NULL,
+    SupplierAddress VARCHAR(200) NULL
 );
-GO
 
 CREATE TABLE Employee (
-    EmployeeID     INT IDENTITY(1,1) PRIMARY KEY,
-    FirstName      NVARCHAR(50) NOT NULL,
-    LastName       NVARCHAR(50) NOT NULL,
-    Role           NVARCHAR(30) NOT NULL,
-    ContactNumber  NVARCHAR(20) NULL
+    EmployeeID INT IDENTITY(1,1) PRIMARY KEY,
+    FirstName VARCHAR(50) NOT NULL,
+    LastName VARCHAR(50) NOT NULL,
+    EmployeeRole VARCHAR(30) NOT NULL,
+    ContactNumber VARCHAR(20) NULL
 );
-GO
 
 CREATE TABLE Customer (
-    CustomerID     INT IDENTITY(1,1) PRIMARY KEY,
-    FirstName      NVARCHAR(50) NOT NULL,
-    LastName       NVARCHAR(50) NOT NULL,
-    ContactNumber  NVARCHAR(20) NULL,
-    CreditLimit    DECIMAL(10,2) NOT NULL DEFAULT 0 CHECK (CreditLimit >= 0)
+    CustomerID INT IDENTITY(1,1) PRIMARY KEY,
+    FirstName VARCHAR(50) NOT NULL,
+    LastName VARCHAR(50) NOT NULL,
+    ContactNumber VARCHAR(20) NULL,
+    CreditLimit DECIMAL(10,2) NOT NULL DEFAULT 0 CHECK (CreditLimit >= 0)
 );
-GO
+
 CREATE TABLE Product (
-    ProductID        INT IDENTITY(1,1) PRIMARY KEY,
-    CategoryID       INT NOT NULL,
-    ProductName      NVARCHAR(100) NOT NULL,
-    UnitPrice        DECIMAL(10,2) NOT NULL CHECK (UnitPrice >= 0),
-    CostPrice        DECIMAL(10,2) NOT NULL CHECK (CostPrice >= 0),
-    QuantityInStock  INT NOT NULL DEFAULT 0 CHECK (QuantityInStock >= 0),
-    ReorderLevel     INT NOT NULL DEFAULT 0 CHECK (ReorderLevel >= 0),
-    ExpiryDate       DATE NULL,
+    ProductID INT IDENTITY(1,1) PRIMARY KEY,
+    CategoryID INT NOT NULL,
+    ProductName VARCHAR(100) NOT NULL,
+    UnitPrice DECIMAL(10,2) NOT NULL CHECK (UnitPrice >= 0),
+    CostPrice DECIMAL(10,2) NOT NULL CHECK (CostPrice >= 0),
+    QuantityInStock INT NOT NULL DEFAULT 0 CHECK (QuantityInStock >= 0),
+    ReorderLevel INT NOT NULL DEFAULT 0 CHECK (ReorderLevel >= 0),
+    ExpiryDate DATE NULL,
     CONSTRAINT FK_Product_Category FOREIGN KEY (CategoryID)
         REFERENCES Category (CategoryID)
 );
-GO
+
+CREATE TABLE Purchase (
+    PurchaseID INT IDENTITY(1,1) PRIMARY KEY,
+    SupplierID INT NOT NULL,
+    PurchaseDate DATETIME NOT NULL DEFAULT GETDATE(),
+    TotalAmount DECIMAL(10,2) NOT NULL DEFAULT 0 CHECK (TotalAmount >= 0),
+    CONSTRAINT FK_Purchase_Supplier FOREIGN KEY (SupplierID)    
+        REFERENCES Supplier(SupplierID)
+);
+
+CREATE TABLE PurchaseItem (
+    PurchaseItemID INT IDENTITY(1,1) PRIMARY KEY,
+    PurchaseID INT NOT NULL,
+    ProductID INT NOT NULL,
+    QuantityBought INT NOT NULL CHECK (QuantityBought > 0),
+    UnitCost DECIMAL(10,2) NOT NULL CHECK (UnitCost >=0),
+    CONSTRAINT FK_PurchaseItem_Purchase FOREIGN KEY (PurchaseID) 
+        REFERENCES Purchase(PurchaseID),
+    CONSTRAINT FK_PurchaseItem_Product FOREIGN KEY (ProductID)
+        REFERENCES Product(ProductID)
+);
+
+CREATE TABLE Sale (
+    SaleID INT IDENTITY(1,1) PRIMARY KEY,
+    CustomerID INT NULL,
+    EmployeeID INT NOT NULL,
+    SaleDate DATETIME NOT NULL DEFAULT GETDATE(),
+    PaymentType VARCHAR(30) NOT NULL,
+    TotalAmount DECIMAL(10,2) NOT NULL DEFAULT 0 CHECK (TotalAmount >= 0),
+    CONSTRAINT FK_Sale_Customer FOREIGN KEY (CustomerID)
+        REFERENCES Customer(CustomerID),
+    CONSTRAINT FK_Sale_Employee FOREIGN KEY (EmployeeID)
+        REFERENCES Employee(EmployeeID)
+);
+
+CREATE TABLE SaleItem (
+    SaleItemID INT IDENTITY(1,1) PRIMARY KEY,
+    SaleID INT NOT NULL,
+    ProductID INT NOT NULL,
+    QuantitySold INT NOT NULL CHECK (QuantitySold > 0),
+    UnitPriceAtSale DECIMAL(10,2) NOT NULL CHECK (UnitPriceAtSale >= 0),
+    CONSTRAINT FK_SaleItem_Sale FOREIGN KEY (SaleID)
+        REFERENCES Sale(SaleID),
+    CONSTRAINT FK_SaleItem_Product FOREIGN KEY (ProductID)
+        REFERENCES Product(ProductID)
+);
+
+CREATE TABLE InventoryAdjustments (
+    AdjustmentID INT IDENTITY(1,1) PRIMARY KEY,
+    ProductID INT NOT NULL,
+    EmployeeID INT NOT NULL,
+    AdjustmentDate DATETIME NOT NULL DEFAULT GETDATE(),
+    QuantityAdjusted INT NOT NULL,
+    Reason VARCHAR(50) NOT NULL,
+    CONSTRAINT FK_InvAdj_Product FOREIGN KEY (ProductID)
+        REFERENCES Product(ProductID),
+    CONSTRAINT FK_InvAdj_Employee FOREIGN KEY (EmployeeID)
+        REFERENCES Employee(EmployeeID)
+);
