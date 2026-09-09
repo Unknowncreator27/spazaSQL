@@ -103,3 +103,38 @@ CREATE TABLE InventoryAdjustments (
     CONSTRAINT FK_InvAdj_Employee FOREIGN KEY (EmployeeID)
         REFERENCES Employee(EmployeeID)
 );
+
+
+INSERT INTO Category (CategoryName)
+VALUES
+('Beverages'),
+('Snacks'),
+('Household'),
+('Toiletries'),
+('Canned Food');
+
+INSERT INTO Supplier (SupplierName, ContactNumber, SupplierAddress)
+VALUES
+('Coca Cola Distributors', '0215551001', 'Cape Town'),
+('Tiger Brands SA', '0115552002', 'Johannesburg'),
+('Unilever South Africa', '0315553003', 'Durban'),
+('Pioneer Foods', '0215554004', 'Paarl'),
+('Local Wholesale Supplies', '0215555005', 'Bellville');
+
+INSERT INTO Emplyee
+(Firstname, LastName, EmplyeeRole, ContactNumber)
+VALUES
+('Thabo', 'Mokoena', 'Manager', '0821112233'),
+('Sarah', 'Jacobs', 'Cashier', '0832223344'),
+('Michael', 'Smith', 'Stock Clerk', '0843334455'),
+('Lerato', 'Dlamini', 'Cashier', '0854445566'),
+('Jason', 'Peters', 'Supervisor', '0865556677');
+
+
+INSERT INTO Customer (FirstName, LastName, ContactNumber, CreditLimit)
+VALUES 
+('Sipho', 'Nkosi', '0712345678', 500.00),
+('Nomsa', 'Dube', '0723456789', 0.00),
+('Pieter', 'Van Wyk', '0734567890', 1000.00),
+('Ayanda', 'Mthembu', '0745678901', 250.00),
+('Jessica', 'Williams', '0756789012', 0.00);
