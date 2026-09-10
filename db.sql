@@ -1,4 +1,32 @@
 CREATE DATABASE spazaDB
+
+ON PRIMARY
+(
+   NAME = spazaDB,
+   FILENAME = 'C:\spazaDB_Data.mdf', -- not sure where to place the data  file
+   SIZE = 50GB --update as we go
+   MAXSIZE = 100GB
+   FILEGROWTH = 10GB
+),
+
+-- Secondary filegroup for non-clustered indexes or historic data
+FILEGROUP Secondary
+(
+    NAME = spazaDBSecondary,
+    FILENAME = 'C:\spazaDB_Data_Secondary.ndf',
+    SIZE = 50GB,
+    MAXSIZE = 100GB,
+    FILEGROWTH = 5GB
+),
+-- Log file
+LOG ON
+(
+    NAME = spazaDBLog,
+    FILENAME = 'C:\spazaDB_Log.ldf',
+    SIZE = 20GB,
+    MAXSIZE = 40GB,
+    FILEGROWTH = 2GB
+);
 GO
 
 USE spazaDB
@@ -355,4 +383,228 @@ FROM Purchase p
 JOIN Supplier sup ON p.SupplierID = sup.SupplierID
 JOIN PurchaseItem pi ON p.PurchaseID = pi.PurchaseID
 GROUP BY p.PurchaseID, p.PurchaseDate, sup.SupplierName;
+GO
+
+----------------------------------------------------------------
+		        -- STORED PROCEDURES --
+-----------------------------------------------------------------
+---- SP for creating a new sale
+
+CREATE PROCEDURE sp_AddNewSale
+(
+    @CustomerID INT = NULL,
+    @EmployeeID INT,
+    @PaymentType VARCHAR(30),
+    @ProductID INT,
+    @QuantitySold INT
+)
+AS
+BEGIN
+
+    BEGIN TRY
+
+        BEGIN TRANSACTION;
+
+        DECLARE @SaleID INT;
+        DECLARE @UnitPrice DECIMAL(10,2);
+        DECLARE @TotalAmount DECIMAL(10,2);
+
+
+        -- Get current product price
+        SELECT @UnitPrice = UnitPrice
+        FROM Product
+        WHERE ProductID = @ProductID;
+
+
+        -- Check stock availability
+        IF (SELECT QuantityInStock FROM Product WHERE ProductID = @ProductID) < @QuantitySold
+        BEGIN
+            THROW 50001, 'Not enough stock available', 1;
+        END;
+
+
+        -- Calculate total
+        SET @TotalAmount = @UnitPrice * @QuantitySold;
+
+
+        -- Insert sale
+        INSERT INTO Sale
+        (
+            CustomerID,
+            EmployeeID,
+            PaymentType,
+            TotalAmount
+        )
+        VALUES
+        (
+            @CustomerID,
+            @EmployeeID,
+            @PaymentType,
+            @TotalAmount
+        );
+
+
+        SET @SaleID = SCOPE_IDENTITY();
+
+
+        -- Insert sale item
+        INSERT INTO SaleItem
+        (
+            SaleID,
+            ProductID,
+            QuantitySold,
+            UnitPriceAtSale
+        )
+        VALUES
+        (
+            @SaleID,
+            @ProductID,
+            @QuantitySold,
+            @UnitPrice
+        );
+
+
+        -- Update stock
+        UPDATE Product
+        SET QuantityInStock = QuantityInStock - @QuantitySold
+        WHERE ProductID = @ProductID;
+
+
+        COMMIT TRANSACTION;
+
+
+        PRINT 'Sale added successfully';
+
+
+    END TRY
+
+    BEGIN CATCH
+
+        ROLLBACK TRANSACTION;
+
+        THROW;
+
+    END CATCH
+
+END;
+GO
+
+--- SP to update stock after purchases
+
+CREATE PROCEDURE sp_UpdateStockAfterPurchase
+(
+    @ProductID INT,
+    @QuantityPurchased INT
+)
+AS
+BEGIN
+
+    BEGIN TRY
+
+        BEGIN TRANSACTION;
+
+
+        -- Check that the product exists
+        IF NOT EXISTS 
+        (
+            SELECT 1 
+            FROM Product 
+            WHERE ProductID = @ProductID
+        )
+        BEGIN
+            THROW 50002, 'Product does not exist', 1;
+        END;
+
+
+        -- Check quantity is valid
+        IF @QuantityPurchased <= 0
+        BEGIN
+            THROW 50003, 'Purchase quantity must be greater than zero', 1;
+        END;
+
+
+        -- Increase stock
+        UPDATE Product
+        SET QuantityInStock = QuantityInStock + @QuantityPurchased
+        WHERE ProductID = @ProductID;
+
+
+        COMMIT TRANSACTION;
+
+
+        PRINT 'Stock updated successfully';
+
+
+    END TRY
+
+
+    BEGIN CATCH
+
+        ROLLBACK TRANSACTION;
+
+        THROW;
+
+    END CATCH
+
+END;
+GO
+
+-- SP to search productss
+
+CREATE PROCEDURE sp_SearchProducts
+(
+    @SearchTerm VARCHAR(100) = NULL
+)
+AS
+BEGIN
+
+    BEGIN TRY
+
+        SELECT
+            P.ProductID,
+            P.ProductName,
+            C.CategoryName,
+            P.UnitPrice,
+            P.QuantityInStock,
+            P.ReorderLevel,
+            P.ExpiryDate
+        FROM Product P
+        INNER JOIN Category C
+            ON P.CategoryID = C.CategoryID
+        WHERE 
+            @SearchTerm IS NULL
+            OR P.ProductName LIKE '%' + @SearchTerm + '%'
+            OR C.CategoryName LIKE '%' + @SearchTerm + '%';
+
+    END TRY
+
+    BEGIN CATCH
+
+        THROW;
+
+    END CATCH
+
+END;
+GO
+
+
+-----------------------------------------------------------------
+		-- DATABASE BACKUP (DON'T RUN)
+-----------------------------------------------------------------
+CREATE BACKUP spazaDB
+TO DISK = 'C:\backups\spazadb.bak',
+WITH FORMAT, -- overwrites any existing backups and creates a clean new backup
+GO
+
+-- RESTORE DATABASE (IF NEEDED)
+-- Force existing connections to close
+ALTER DATABASE spazaDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+GO
+
+ALTER DATABASE spazaDB
+FROM DISK 'C:\backups\spazadb.bak'
+WITH REPLACE -- overwrites the existing database
+
+-- set back to multi-user mode
+ALTER DATABASE spazaDB SET MULTI_USER;
 GO
