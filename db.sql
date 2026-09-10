@@ -4,6 +4,13 @@ GO
 USE spazaDB
 GO
 
+----------------------------------------------------------
+--- Where we will add the data file and log file ---
+---- test1234
+
+
+----------------------------------------------------------
+
 CREATE TABLE Category (
     CategoryID INT IDENTITY(1,1) PRIMARY KEY,
     CategoryName VARCHAR(50) NOT NULL UNIQUE
@@ -130,11 +137,7 @@ VALUES
 ('Flash Mobile Vending', 'Digital Aggregator', '0839035274', '36 Stellenberg Road, Parow Industria, Cape Town, 7493');
 
 INSERT INTO Employee
-<<<<<<< HEAD
 (FirstName, LastName, EmployeeRole, ContactNumber)
-=======
-(Firstname, LastName, EmployeeRole, ContactNumber)
->>>>>>> 47ae7fe5277a829c42f3e55a3165a2a4d29e288d
 VALUES
 ('Thabo', 'Mokoena', 'Manager', '0821112233'),
 ('Sarah', 'Jacobs', 'Cashier', '0832223344'),
