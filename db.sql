@@ -121,8 +121,8 @@ VALUES
 ('Pioneer Foods', '0215554004', 'Paarl'),
 ('Local Wholesale Supplies', '0215555005', 'Bellville');
 
-INSERT INTO Emplyee
-(Firstname, LastName, EmplyeeRole, ContactNumber)
+INSERT INTO Employee
+(FirstName, LastName, EmployeeRole, ContactNumber)
 VALUES
 ('Thabo', 'Mokoena', 'Manager', '0821112233'),
 ('Sarah', 'Jacobs', 'Cashier', '0832223344'),
