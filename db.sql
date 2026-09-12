@@ -608,3 +608,114 @@ WITH REPLACE -- overwrites the existing database
 -- set back to multi-user mode
 ALTER DATABASE spazaDB SET MULTI_USER;
 GO
+
+
+/*
+-------------------------------------------------------------------
+			QUERIES
+--------------------------------------------------------------------
+
+*/
+
+
+-- Query 1: Products that need to be restocked
+
+SELECT
+    ProductID,
+    ProductName,
+    QuantityInStock,
+    ReorderLevel
+FROM Product
+WHERE QuantityInStock <= ReorderLevel
+ORDER BY QuantityInStock ASC;
+
+
+-- Query 2: Products and their suppliers
+
+SELECT
+    P.ProductName,
+    S.SupplierName,
+    P.CostPrice,
+    P.QuantityInStock
+FROM Product P
+INNER JOIN PurchaseItem PI
+    ON P.ProductID = PI.ProductID
+INNER JOIN Purchase PU
+    ON PI.PurchaseID = PU.PurchaseID
+INNER JOIN Supplier S
+    ON PU.SupplierID = S.SupplierID
+ORDER BY S.SupplierName, P.ProductName;
+
+-- Query 3: Total sales handled by each employee
+
+SELECT
+    E.EmployeeID,
+    E.FirstName + ' ' + E.LastName AS EmployeeName,
+    COUNT(S.SaleID) AS NumberOfSales,
+    SUM(S.TotalAmount) AS TotalSales
+FROM Employee E
+LEFT JOIN Sale S
+    ON E.EmployeeID = S.EmployeeID
+GROUP BY
+    E.EmployeeID,
+    E.FirstName,
+    E.LastName
+ORDER BY TotalSales DESC;
+
+-- Query 5: Expired products
+
+SELECT
+    ProductID,
+    ProductName,
+    QuantityInStock,
+    ExpiryDate
+FROM Product
+WHERE ExpiryDate IS NOT NULL
+  AND ExpiryDate < GETDATE()
+ORDER BY ExpiryDate ASC;
+
+
+
+
+/*
+----------------------------------------------------------------
+			User defined functions
+----------------------------------------------------------------
+
+*/
+
+
+CREATE FUNCTION dbo.fn_GetStockValue
+(
+    @ProductID INT
+)
+RETURNS DECIMAL(10,2)
+AS
+BEGIN
+    DECLARE @StockValue DECIMAL(10,2);
+
+    SELECT @StockValue = QuantityInStock * CostPrice
+    FROM Product
+    WHERE ProductID = @ProductID;
+
+    RETURN ISNULL(@StockValue, 0);
+END;
+GO
+
+
+CREATE FUNCTION dbo.fn_GetCustomerFullName
+(
+    @CustomerID INT
+)
+RETURNS VARCHAR(100)
+AS
+BEGIN
+    DECLARE @FullName VARCHAR(100);
+
+    SELECT @FullName = CONCAT(Firstname, ' ', LastName)
+    FROM Customer
+    WHERE CustomerID = @CustomerID;
+
+    RETURN ISNULL(@FullName, 'Unknown Customer');
+END;
+GO
