@@ -1,43 +1,42 @@
+----------------------------------------------------------------
+        -- Creating database and database files
+----------------------------------------------------------------
 CREATE DATABASE spazaDB
-
 ON PRIMARY
 (
    NAME = spazaDB,
-   FILENAME = 'C:\spazaDB_Data.mdf', -- not sure where to place the data  file
-   SIZE = 50GB --update as we go
-   MAXSIZE = 100GB
-   FILEGROWTH = 10GB
+   FILENAME = 'C:\Databases\spazaDB_Data.mdf',
+   SIZE = 50MB, --update as we go
+   MAXSIZE = 2000MB,
+   FILEGROWTH = 10MB
 ),
 
 -- Secondary filegroup for non-clustered indexes or historic data
 FILEGROUP Secondary
 (
     NAME = spazaDBSecondary,
-    FILENAME = 'C:\spazaDB_Data_Secondary.ndf',
-    SIZE = 50GB,
-    MAXSIZE = 100GB,
-    FILEGROWTH = 5GB
-),
+    FILENAME = 'C:\Databases\spazaDB_Data_Secondary.ndf',
+    SIZE = 50MB,
+    MAXSIZE = 2000MB,
+    FILEGROWTH = 10MB
+)
+
 -- Log file
 LOG ON
 (
     NAME = spazaDBLog,
-    FILENAME = 'C:\spazaDB_Log.ldf',
-    SIZE = 20GB,
-    MAXSIZE = 40GB,
-    FILEGROWTH = 2GB
+    FILENAME = 'C:\Databases\spazaDB_Log.ldf',
+    SIZE = 25MB,
+    MAXSIZE = 1000MB,
+    FILEGROWTH = 5MB
 );
 GO
 
+----------------------------------------------------------------
+        -- Creating tables
+----------------------------------------------------------------
 USE spazaDB
 GO
-
-----------------------------------------------------------
---- Where we will add the data file and log file ---
----- test1234
-
-
-----------------------------------------------------------
 
 CREATE TABLE Category (
     CategoryID INT IDENTITY(1,1) PRIMARY KEY,
@@ -142,8 +141,9 @@ CREATE TABLE InventoryAdjustments (
         REFERENCES Employee(EmployeeID)
 );
 
---------------------------------------------------------------------------------------------------
-
+----------------------------------------------------------------
+        -- Insert data
+----------------------------------------------------------------
 INSERT INTO Category (CategoryName)
 VALUES
 ('Groceries'), 
@@ -161,7 +161,7 @@ INSERT INTO Supplier(SupplierName, SupplierCategory, ContactNumber, SupplierAddr
 VALUES
 ('Distribution One', 'Fast-Moving Consumer Goods', '0626372441', 'Plot 54 Third Avenue, Gerhardsville, Centurion, 0157'),
 ('Makro Wholesale', 'Cash & Carry Wholesaler', '086030000', '16 Peltier Drive, Sunninghill, Sandton, 2157'),
-('Pioneer Foos (PepsiCo SA', 'FMCG & Bakery', '080 021 2360', 'Parc Du Cap Office Park, Building 5, 10 Willie van Schoor Avenue, Bellville, 7530'),
+('Pioneer Foos (PepsiCo SA', 'FMCG & Bakery', '080 0212360', 'Parc Du Cap Office Park, Building 5, 10 Willie van Schoor Avenue, Bellville, 7530'),
 ('Flash Mobile Vending', 'Digital Aggregator', '0839035274', '36 Stellenberg Road, Parow Industria, Cape Town, 7493');
 
 INSERT INTO Employee
@@ -353,15 +353,47 @@ VALUES
 (7, 4, '2026-09-05 09:20:00', 1, 'Found extra during stocktake');
 GO
 
+----------------------------------------------------------------
+        -- Indexes
+----------------------------------------------------------------
+-- Index for Product table
+CREATE NONCLUSTERED INDEX IX_Product_CategoryID ON Product(CategoryID);
 
----------------------------------------------------------------------------------
+-- Index for Purchase table
+CREATE NONCLUSTERED INDEX IX_Purchase_SupplierID ON Purchase(SupplierID);
 
+-- Indexes for PurchaseItem table
+CREATE NONCLUSTERED INDEX IX_PurchaseItem_PurchaseID ON PurchaseItem(PurchaseID);
+CREATE NONCLUSTERED INDEX IX_PurchaseItem_ProductID ON PurchaseItem(ProductID);
+
+-- Indexes for Sale table
+CREATE NONCLUSTERED INDEX IX_Sale_CustomerID ON Sale(CustomerID);
+CREATE NONCLUSTERED INDEX IX_Sale_EmployeeID ON Sale(EmployeeID);
+
+-- Indexes for SaleItem table
+CREATE NONCLUSTERED INDEX IX_SaleItem_SaleID ON SaleItem(SaleID);
+CREATE NONCLUSTERED INDEX IX_SaleItem_ProductID ON SaleItem(ProductID);
+
+-- Indexes for InventoryAdjustments table
+CREATE NONCLUSTERED INDEX IX_InvAdj_ProductID ON InventoryAdjustments(ProductID);
+CREATE NONCLUSTERED INDEX IX_InvAdj_EmployeeID ON InventoryAdjustments(EmployeeID);
+
+-- Search optimisation index
+CREATE NONCLUSTERED INDEX IX_Product_ProductName ON Product(ProductName);
+
+GO
+
+
+----------------------------------------------------------------
+		--- Views
+----------------------------------------------------------------
 -- Created this view to automatically calculate Sale Totals
 CREATE VIEW vw_SaleSummary AS
 SELECT
     s.SaleID,
     s.SaleDate,
     s.PaymentType,
+    s.EmployeeID,
     c.FirstName + ' ' + c.LastName AS CustomerName,
     e.FirstName AS CashierName,
     SUM (si.QuantitySold * si.UnitPriceAtSale) AS TotalSaleAmount
@@ -369,7 +401,7 @@ FROM Sale s
 LEFT JOIN Customer c ON s.CustomerID = c.CustomerID
 JOIN Employee e ON s.EmployeeID = e.EmployeeID
 JOIN SaleItem si ON s.SaleID = si.SaleID
-GROUP BY s.SaleID, s.SaleDate, s.PaymentType, c.FirstName, c.LastName, e.FirstName;
+GROUP BY s.SaleID, s.SaleDate, s.PaymentType, s.EmployeeID, c.FirstName, c.LastName, e.FirstName;
 GO
 
 -- Created this view to automatically calculate Purchase Totals
@@ -386,10 +418,9 @@ GROUP BY p.PurchaseID, p.PurchaseDate, sup.SupplierName;
 GO
 
 ----------------------------------------------------------------
-		        -- STORED PROCEDURES --
+		        -- Stored procedures
 -----------------------------------------------------------------
----- SP for creating a new sale
-
+---- sp for creating a new sale
 CREATE PROCEDURE sp_AddNewSale
 (
     @CustomerID INT = NULL,
@@ -400,164 +431,103 @@ CREATE PROCEDURE sp_AddNewSale
 )
 AS
 BEGIN
-
     BEGIN TRY
-
         BEGIN TRANSACTION;
 
         DECLARE @SaleID INT;
         DECLARE @UnitPrice DECIMAL(10,2);
-        DECLARE @TotalAmount DECIMAL(10,2);
-
 
         -- Get current product price
         SELECT @UnitPrice = UnitPrice
         FROM Product
         WHERE ProductID = @ProductID;
 
-
         -- Check stock availability
         IF (SELECT QuantityInStock FROM Product WHERE ProductID = @ProductID) < @QuantitySold
         BEGIN
-            THROW 50001, 'Not enough stock available', 1;
+            ;THROW 50001, 'Not enough stock available', 1;
         END;
 
-
-        -- Calculate total
-        SET @TotalAmount = @UnitPrice * @QuantitySold;
-
-
         -- Insert sale
-        INSERT INTO Sale
-        (
-            CustomerID,
-            EmployeeID,
-            PaymentType,
-            TotalAmount
-        )
-        VALUES
-        (
-            @CustomerID,
-            @EmployeeID,
-            @PaymentType,
-            @TotalAmount
-        );
-
+        INSERT INTO Sale (CustomerID, EmployeeID, PaymentType)
+        VALUES (@CustomerID, @EmployeeID, @PaymentType);
 
         SET @SaleID = SCOPE_IDENTITY();
 
-
         -- Insert sale item
-        INSERT INTO SaleItem
-        (
-            SaleID,
-            ProductID,
-            QuantitySold,
-            UnitPriceAtSale
-        )
-        VALUES
-        (
-            @SaleID,
-            @ProductID,
-            @QuantitySold,
-            @UnitPrice
-        );
-
+        INSERT INTO SaleItem (SaleID, ProductID, QuantitySold, UnitPriceAtSale)
+        VALUES (@SaleID, @ProductID, @QuantitySold, @UnitPrice);
 
         -- Update stock
         UPDATE Product
         SET QuantityInStock = QuantityInStock - @QuantitySold
         WHERE ProductID = @ProductID;
 
-
         COMMIT TRANSACTION;
-
-
         PRINT 'Sale added successfully';
 
-
     END TRY
-
     BEGIN CATCH
-
         ROLLBACK TRANSACTION;
-
-        THROW;
-
+        ;THROW;
     END CATCH
-
 END;
 GO
 
---- SP to update stock after purchases
-
-CREATE PROCEDURE sp_UpdateStockAfterPurchase
+--- sp to update stock after purchases
+CREATE PROCEDURE sp_AddNewPurchase
 (
+    @SupplierID INT,
     @ProductID INT,
-    @QuantityPurchased INT
+    @QuantityBought INT,
+    @UnitCost DECIMAL(10,2)
 )
 AS
 BEGIN
-
     BEGIN TRY
-
         BEGIN TRANSACTION;
 
+        DECLARE @PurchaseID INT;
 
-        -- Check that the product exists
-        IF NOT EXISTS 
-        (
-            SELECT 1 
-            FROM Product 
-            WHERE ProductID = @ProductID
-        )
+        -- 1. Check that the quantity is valid
+        IF @QuantityBought <= 0
         BEGIN
-            THROW 50002, 'Product does not exist', 1;
+            ;THROW 50003, 'Purchase quantity must be greater than zero', 1;
         END;
 
+        -- 2. Insert into Purchase
+        INSERT INTO Purchase (SupplierID)
+        VALUES (@SupplierID);
 
-        -- Check quantity is valid
-        IF @QuantityPurchased <= 0
-        BEGIN
-            THROW 50003, 'Purchase quantity must be greater than zero', 1;
-        END;
+        SET @PurchaseID = SCOPE_IDENTITY();
 
+        -- 3. Insert into PurchaseItem
+        INSERT INTO PurchaseItem (PurchaseID, ProductID, QuantityBought, UnitCost)
+        VALUES (@PurchaseID, @ProductID, @QuantityBought, @UnitCost);
 
-        -- Increase stock
+        -- 4. Increase stock
         UPDATE Product
-        SET QuantityInStock = QuantityInStock + @QuantityPurchased
-        WHERE ProductID = @ProductID;
-
+        SET QuantityInStock = QuantityInStock + @QuantityBought
+        WHERE ProductID =@ProductID;
 
         COMMIT TRANSACTION;
-
-
-        PRINT 'Stock updated successfully';
-
+        PRINT 'Purchase logged and stock updated successfully';
 
     END TRY
-
-
     BEGIN CATCH
-
         ROLLBACK TRANSACTION;
-
-        THROW;
-
+        ;THROW;
     END CATCH
-
 END;
 GO
 
--- SP to search productss
-
+-- sp to search productss
 CREATE PROCEDURE sp_SearchProducts
 (
     @SearchTerm VARCHAR(100) = NULL
 )
 AS
 BEGIN
-
     BEGIN TRY
 
         SELECT
@@ -577,114 +547,16 @@ BEGIN
             OR C.CategoryName LIKE '%' + @SearchTerm + '%';
 
     END TRY
-
     BEGIN CATCH
-
-        THROW;
-
+        ;THROW;
     END CATCH
-
 END;
 GO
 
 
------------------------------------------------------------------
-		-- DATABASE BACKUP (DON'T RUN)
------------------------------------------------------------------
-CREATE BACKUP spazaDB
-TO DISK = 'C:\backups\spazadb.bak',
-WITH FORMAT, -- overwrites any existing backups and creates a clean new backup
-GO
-
--- RESTORE DATABASE (IF NEEDED)
--- Force existing connections to close
-ALTER DATABASE spazaDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-GO
-
-ALTER DATABASE spazaDB
-FROM DISK 'C:\backups\spazadb.bak'
-WITH REPLACE -- overwrites the existing database
-
--- set back to multi-user mode
-ALTER DATABASE spazaDB SET MULTI_USER;
-GO
-
-
-/*
--------------------------------------------------------------------
-			QUERIES
---------------------------------------------------------------------
-
-*/
-
-
--- Query 1: Products that need to be restocked
-
-SELECT
-    ProductID,
-    ProductName,
-    QuantityInStock,
-    ReorderLevel
-FROM Product
-WHERE QuantityInStock <= ReorderLevel
-ORDER BY QuantityInStock ASC;
-
-
--- Query 2: Products and their suppliers
-
-SELECT
-    P.ProductName,
-    S.SupplierName,
-    P.CostPrice,
-    P.QuantityInStock
-FROM Product P
-INNER JOIN PurchaseItem PI
-    ON P.ProductID = PI.ProductID
-INNER JOIN Purchase PU
-    ON PI.PurchaseID = PU.PurchaseID
-INNER JOIN Supplier S
-    ON PU.SupplierID = S.SupplierID
-ORDER BY S.SupplierName, P.ProductName;
-
--- Query 3: Total sales handled by each employee
-
-SELECT
-    E.EmployeeID,
-    E.FirstName + ' ' + E.LastName AS EmployeeName,
-    COUNT(S.SaleID) AS NumberOfSales,
-    SUM(S.TotalAmount) AS TotalSales
-FROM Employee E
-LEFT JOIN Sale S
-    ON E.EmployeeID = S.EmployeeID
-GROUP BY
-    E.EmployeeID,
-    E.FirstName,
-    E.LastName
-ORDER BY TotalSales DESC;
-
--- Query 5: Expired products
-
-SELECT
-    ProductID,
-    ProductName,
-    QuantityInStock,
-    ExpiryDate
-FROM Product
-WHERE ExpiryDate IS NOT NULL
-  AND ExpiryDate < GETDATE()
-ORDER BY ExpiryDate ASC;
-
-
-
-
-/*
 ----------------------------------------------------------------
-			User defined functions
+		--- User-defined functions
 ----------------------------------------------------------------
-
-*/
-
-
 CREATE FUNCTION dbo.fn_GetStockValue
 (
     @ProductID INT
@@ -719,3 +591,174 @@ BEGIN
     RETURN ISNULL(@FullName, 'Unknown Customer');
 END;
 GO
+
+-------------------------------------------------------------------
+		--- Queries
+--------------------------------------------------------------------
+-- Query 1: Products that need to be restocked
+SELECT
+    ProductID,
+    ProductName,
+    QuantityInStock,
+    ReorderLevel
+FROM Product
+WHERE QuantityInStock <= ReorderLevel
+ORDER BY QuantityInStock ASC;
+
+-- Query 2: Products and their suppliers
+SELECT
+    P.ProductName,
+    S.SupplierName,
+    P.CostPrice,
+    P.QuantityInStock
+FROM Product P
+INNER JOIN PurchaseItem PI
+    ON P.ProductID = PI.ProductID
+INNER JOIN Purchase PU
+    ON PI.PurchaseID = PU.PurchaseID
+INNER JOIN Supplier S
+    ON PU.SupplierID = S.SupplierID
+ORDER BY S.SupplierName, P.ProductName;
+
+-- Query 3: Total sales handled by each employee
+SELECT
+    E.EmployeeID,
+    E.FirstName + ' ' + E.LastName AS EmployeeName,
+    COUNT(vw.SaleID) AS NumberOfSales,
+    SUM(vw.TotalSaleAmount) AS TotalSales
+FROM Employee E
+LEFT JOIN vw_SaleSummary vw
+    ON E.EmployeeID = vw.EmployeeID
+GROUP BY
+    E.EmployeeID,
+    E.FirstName,
+    E.LastName
+ORDER BY TotalSales DESC;
+
+-- Query 4: Expired products
+SELECT
+    ProductID,
+    ProductName,
+    QuantityInStock,
+    ExpiryDate
+FROM Product
+WHERE ExpiryDate IS NOT NULL
+  AND ExpiryDate < GETDATE()
+ORDER BY ExpiryDate ASC;
+GO
+
+-- Query 5: Profit margin analysis per product
+SELECT
+    p.ProductName,
+    SUM(si.QuantitySold) AS TotalUnitsSold,
+    SUM(si.QuantitySold * si.UnitPriceAtSale) AS TotalRevenue,
+    SUM(si.QuantitySold * p.CostPrice) AS TotalCost,
+    SUM(si.QuantitySold * si.UnitPriceAtSale) - SUM(si.QuantitySold * p.CostPrice) AS GrossProfit
+FROM SaleItem si
+JOIN Product p ON si.ProductID = p.ProductID
+GROUP BY p.ProductName
+ORDER BY GrossProfit DESC;
+GO
+
+
+/*
+-----------------------------------------------------------------
+		-- Datbase backup
+-----------------------------------------------------------------
+BACKUP DATABASE spazaDB
+TO DISK = 'C:\backups\spazadb.bak'
+WITH FORMAT; -- overwrites any existing backups and creates a clean new backup
+GO
+
+-- RESTORE DATABASE (IF NEEDED)
+-- Force existing connections to close
+ALTER DATABASE spazaDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+GO
+
+RESTORE DATABASE spazaDB
+FROM DISK = 'C:\backups\spazadb.bak'
+WITH REPLACE -- overwrites the existing database
+
+-- set back to multi-user mode
+ALTER DATABASE spazaDB SET MULTI_USER;
+GO
+*/
+
+----------------------------------------------------------------
+        -- Viewing tables and views
+----------------------------------------------------------------
+-- Tables
+SELECT * FROM Category;
+SELECT * FROM Customer;
+SELECT * FROM Employee;
+SELECT * FROM InventoryAdjustments;
+SELECT * FROM Product;
+SELECT * FROM Purchase;
+SELECT * FROM PurchaseItem;
+SELECT * FROM Sale;
+SELECT * FROM SaleItem;
+SELECT * FROM Supplier;
+GO
+
+-- Views
+SELECT * FROM vw_SaleSummary
+ORDER BY SaleDate DESC;
+GO
+
+SELECT * FROM vw_PurchaseSummary
+ORDER BY TotalPurchaseAmount DESC;
+GO
+
+----------------------------------------------------------------
+        -- Running stored procedures
+----------------------------------------------------------------
+-- using the SearchProducts procedure to find all products that contain the term 'Sugar'
+EXEC sp_SearchProducts @SearchTerm = 'sugar';
+GO
+
+-- recording a new purchase
+EXEC sp_AddNewPurchase
+    @SupplierID = 2,
+    @ProductID = 5,
+    @QuantityBought = 10,
+    @UnitCost = 20.00;
+GO
+
+-- recording a new sale
+EXEC sp_AddNewSale
+    @CustomerID = NULL,
+    @EmployeeID = 2,
+    @PaymentType = 'Cash',
+    @ProductID = 1,
+    @QuantitySold = 2;
+
+
+----------------------------------------------------------------
+        -- Running user-defined functions
+----------------------------------------------------------------
+-- function calculates the total stock value of a single item in stock
+SELECT dbo.fn_GetStockValue(1) AS 'Albany White Bread Value';
+
+-- function calculates every products total value in stock
+SELECT
+    ProductID AS 'Product ID',
+    ProductName AS 'Product Name',
+    QuantityInStock AS 'Quantity (in stock)',
+    CostPrice AS 'Cost Price',
+    dbo.fn_GetStockValue(ProductID) AS 'Total Value on Shelf'
+FROM Product
+ORDER BY 'Total Value on Shelf' DESC;
+
+
+SELECT dbo.fn_GetCustomerFullName(1) AS 'Customer Name';
+
+-- using the function to get the full name of the customer from a sale, filtering out by only card payments
+SELECT
+    CustomerID AS 'Customer ID',
+    dbo.fn_GetCustomerFullName(CustomerID) AS 'Customer Name',
+    SaleID AS 'Sale ID',
+    SaleDate AS 'Sale Date'
+FROM Sale
+WHERE CustomerID IS NOT NULL;
+
+------------------------------------------------------------------------
