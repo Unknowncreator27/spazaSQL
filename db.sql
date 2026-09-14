@@ -161,7 +161,7 @@ INSERT INTO Supplier(SupplierName, SupplierCategory, ContactNumber, SupplierAddr
 VALUES
 ('Distribution One', 'Fast-Moving Consumer Goods', '0626372441', 'Plot 54 Third Avenue, Gerhardsville, Centurion, 0157'),
 ('Makro Wholesale', 'Cash & Carry Wholesaler', '086030000', '16 Peltier Drive, Sunninghill, Sandton, 2157'),
-('Pioneer Foos (PepsiCo SA', 'FMCG & Bakery', '080 0212360', 'Parc Du Cap Office Park, Building 5, 10 Willie van Schoor Avenue, Bellville, 7530'),
+('Pioneer Foods (PepsiCo SA)', 'FMCG & Bakery', '080 0212360', 'Parc Du Cap Office Park, Building 5, 10 Willie van Schoor Avenue, Bellville, 7530'),
 ('Flash Mobile Vending', 'Digital Aggregator', '0839035274', '36 Stellenberg Road, Parow Industria, Cape Town, 7493');
 
 INSERT INTO Employee
@@ -752,7 +752,7 @@ ORDER BY 'Total Value on Shelf' DESC;
 
 SELECT dbo.fn_GetCustomerFullName(1) AS 'Customer Name';
 
--- using the function to get the full name of the customer from a sale, filtering out by only card payments
+-- Using the function to get the full name of customers associated with sales
 SELECT
     CustomerID AS 'Customer ID',
     dbo.fn_GetCustomerFullName(CustomerID) AS 'Customer Name',
