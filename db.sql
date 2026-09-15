@@ -421,11 +421,32 @@ GO
 		        -- Stored procedures
 -----------------------------------------------------------------
 ---- sp for creating a new sale
-CREATE PROCEDURE sp_AddNewSale
+CREATE PROCEDURE sp_CreateNewSale
 (
     @CustomerID INT = NULL,
     @EmployeeID INT,
     @PaymentType VARCHAR(30),
+    @SaleID INT OUTPUT -- instead of passing the data forward, it sends the data back to us
+)
+AS
+BEGIN
+    BEGIN TRY
+        INSERT INTO Sale (CustomerID, EmployeeID, PaymentType)
+        VALUES (@CustomerID, @EmployeeID, @PaymentType);
+
+        -- capture the newly generated SaleID to use for the line items
+        SET @SaleID = SCOPE_IDENTITY(); -- sets the receipt number based on the last ID generated
+        PRINT 'Sale header created successfully. SaleID: ' + CAST(@SaleID AS VARCHAR);
+    END TRY
+    BEGIN CATCH
+        ;THROW;
+    END CATCH
+END;
+GO
+
+CREATE PROCEDURE sp_AddSaleItem
+(
+    @SaleID INT,
     @ProductID INT,
     @QuantitySold INT
 )
@@ -434,10 +455,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        DECLARE @SaleID INT;
         DECLARE @UnitPrice DECIMAL(10,2);
 
-        -- Get current product price
+        -- get current product price
         SELECT @UnitPrice = UnitPrice
         FROM Product
         WHERE ProductID = @ProductID;
@@ -447,12 +467,6 @@ BEGIN
         BEGIN
             ;THROW 50001, 'Not enough stock available', 1;
         END;
-
-        -- Insert sale
-        INSERT INTO Sale (CustomerID, EmployeeID, PaymentType)
-        VALUES (@CustomerID, @EmployeeID, @PaymentType);
-
-        SET @SaleID = SCOPE_IDENTITY();
 
         -- Insert sale item
         INSERT INTO SaleItem (SaleID, ProductID, QuantitySold, UnitPriceAtSale)
@@ -464,7 +478,7 @@ BEGIN
         WHERE ProductID = @ProductID;
 
         COMMIT TRANSACTION;
-        PRINT 'Sale added successfully';
+        PRINT 'Sale item added, stock updated successfully';
 
     END TRY
     BEGIN CATCH
@@ -724,14 +738,42 @@ EXEC sp_AddNewPurchase
     @UnitCost = 20.00;
 GO
 
--- recording a new sale
-EXEC sp_AddNewSale
-    @CustomerID = NULL,
-    @EmployeeID = 2,
-    @PaymentType = 'Cash',
-    @ProductID = 1,
+
+-- recording a new sale with multiple items
+DECLARE @CurrentSale INT;
+
+-- 1. Create the sale header
+EXEC sp_CreateNewSale 
+    @CustomerID = NULL, 
+    @EmployeeID = 2, 
+    @PaymentType = 'Cash', 
+    @SaleID = @CurrentSale OUTPUT;
+
+-- 2. Add the first product (in this case, 2 loaves of bread)
+EXEC sp_AddSaleItem 
+    @SaleID = @CurrentSale, 
+    @ProductID = 1, 
     @QuantitySold = 2;
 
+-- 3. Add a second product to the same receipt (adding 2 cartons of milk)
+EXEC sp_AddSaleItem 
+    @SaleID = @CurrentSale, 
+    @ProductID = 18, 
+    @QuantitySold = 2;
+GO
+
+SELECT * FROM Sale 
+ORDER BY SaleID DESC;
+
+SELECT * FROM SaleItem 
+ORDER BY SaleItemID DESC;
+
+SELECT ProductID, ProductName, QuantityInStock 
+FROM Product 
+WHERE ProductID IN (1, 18);
+
+SELECT * FROM vw_SaleSummary 
+ORDER BY SaleDate DESC;
 
 ----------------------------------------------------------------
         -- Running user-defined functions
@@ -745,9 +787,9 @@ SELECT
     ProductName AS 'Product Name',
     QuantityInStock AS 'Quantity (in stock)',
     CostPrice AS 'Cost Price',
-    dbo.fn_GetStockValue(ProductID) AS 'Total Value on Shelf'
+    dbo.fn_GetStockValue(ProductID) AS [Total Value on Shelf]
 FROM Product
-ORDER BY 'Total Value on Shelf' DESC;
+ORDER BY [Total Value on Shelf] DESC;
 
 
 SELECT dbo.fn_GetCustomerFullName(1) AS 'Customer Name';
