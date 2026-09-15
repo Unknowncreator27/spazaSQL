@@ -675,7 +675,6 @@ ORDER BY GrossProfit DESC;
 GO
 
 
-/*
 -----------------------------------------------------------------
 		-- Datbase backup
 -----------------------------------------------------------------
@@ -696,7 +695,7 @@ WITH REPLACE -- overwrites the existing database
 -- set back to multi-user mode
 ALTER DATABASE spazaDB SET MULTI_USER;
 GO
-*/
+
 
 ----------------------------------------------------------------
         -- Viewing tables and views
