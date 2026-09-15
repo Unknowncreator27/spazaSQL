@@ -683,6 +683,7 @@ TO DISK = 'C:\backups\spazadb.bak'
 WITH FORMAT; -- overwrites any existing backups and creates a clean new backup
 GO
 
+/*
 -- RESTORE DATABASE (IF NEEDED)
 -- Force existing connections to close
 ALTER DATABASE spazaDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
@@ -695,7 +696,7 @@ WITH REPLACE -- overwrites the existing database
 -- set back to multi-user mode
 ALTER DATABASE spazaDB SET MULTI_USER;
 GO
-
+*/
 
 ----------------------------------------------------------------
         -- Viewing tables and views
